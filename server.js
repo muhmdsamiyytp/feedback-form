@@ -8,7 +8,9 @@ app.use(express.json());
 app.use(express.static("public"));
 
 // MongoDB connection
-const client = new MongoClient(process.env.MONGODB_URI);
+const client = new MongoClient(process.env.MONGODB_URI, {
+    family: 4
+});
 
 let feedbackCollection;
 
