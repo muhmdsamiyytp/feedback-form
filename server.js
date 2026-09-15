@@ -1,56 +1,77 @@
 require("dotenv").config();
 const express = require("express");
-const mysql = require("mysql2");
+const { MongoClient } = require("mongodb");
 
 const app = express();
 
-// JSON data receive ചെയ്യാൻ
 app.use(express.json());
-
-// Frontend files serve ചെയ്യാൻ
 app.use(express.static("public"));
 
-// MySQL connection
-const db = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
-});
+// MongoDB connection
+const client = new MongoClient(process.env.MONGODB_URI);
 
-// Database connect ചെയ്യുന്നു
-db.connect((err) => {
-    if (err) {
-        console.log("MySQL connection failed:", err);
-        return;
+let feedbackCollection;
+
+// Connect to MongoDB
+async function connectDB() {
+    try {
+        await client.connect();
+
+        const db = client.db(process.env.DB_NAME);
+        feedbackCollection = db.collection("feedback");
+
+        console.log("MongoDB connected successfully!");
+    } catch (err) {
+        console.log("MongoDB connection failed:", err);
     }
+}
 
-    console.log("MySQL connected successfully!");
-});
+connectDB();
 
 // Feedback submit route
-app.post("/feedback", (req, res) => {
+app.post("/feedback", async (req, res) => {
 
     const { name, email, feedback } = req.body;
 
-    const sql = `
-        INSERT INTO feedback (name, email, feedback)
-        VALUES (?, ?, ?)
-    `;
-
-    db.query(sql, [name, email, feedback], (err, result) => {
-
-        if (err) {
-            console.log("Database error:", err);
-            return res.status(500).json({
-                message: "Failed to save feedback"
-            });
-        }
+    try {
+        await feedbackCollection.insertOne({
+            name: name,
+            email: email,
+            feedback: feedback,
+            createdAt: new Date()
+        });
 
         res.json({
             message: "Feedback submitted successfully!"
         });
-    });
+
+    } catch (err) {
+        console.log("Database error:", err);
+
+        res.status(500).json({
+            message: "Failed to save feedback"
+        });
+    }
+});
+
+// Get all feedback
+app.get("/feedbacks", async (req, res) => {
+
+    try {
+        const feedbacks = await feedbackCollection
+            .find()
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.json(feedbacks);
+
+    } catch (err) {
+        console.log("Database error:", err);
+
+        res.status(500).json({
+            message: "Failed to fetch feedback"
+        });
+    }
 });
 
 // Start server
